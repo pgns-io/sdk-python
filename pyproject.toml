@@ -39,4 +39,7 @@ Documentation = "https://docs.pgns.io/sdks/python"
 Repository = "https://github.com/pgns-io/sdk-python"
 
 [tool.hatch.version]
-path = "_version.py"
+path = "pgns/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pgns"]
