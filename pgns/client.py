@@ -15,30 +15,19 @@ from pgns.sdk.models import (
     ApiKeyCreatedResponse,
     ApiKeyResponse,
     AuthTokens,
-    BillingStatus,
-    CheckoutRequest,
-    CheckoutResponse,
     CreateApiKeyRequest,
     CreateDestination,
     CreateRoost,
     CreateTemplate,
-    DashboardStats,
     Destination,
-    LoginRequest,
-    MagicLinkRequest,
-    MagicLinkResponse,
-    MagicLinkVerifyRequest,
     PaginatedDeliveryAttempts,
     PaginatedPigeons,
     PauseResponse,
     Pigeon,
-    PortalRequest,
-    PortalResponse,
     PreviewTemplateRequest,
     PreviewTemplateResponse,
     ReplayResponse,
     Roost,
-    SignupRequest,
     Template,
     UpdateApiKeyRequest,
     UpdateProfileRequest,
@@ -53,7 +42,7 @@ class PigeonsClient:
 
     Supports two authentication modes:
     - **API key** — pass ``api_key`` for server-side usage.
-    - **JWT** — call :meth:`login` / :meth:`signup`, or pass ``access_token``.
+    - **JWT** — pass ``access_token``.
       Expired tokens are refreshed automatically on ``401``.
 
     Example::
@@ -148,38 +137,6 @@ class PigeonsClient:
         return _handle_response(response)
 
     # -- Auth -----------------------------------------------------------------
-
-    def signup(self, data: SignupRequest) -> AuthTokens:
-        """Create a new account. Stores tokens on the client."""
-        raw = self._unauth_request("POST", "/v1/auth/signup", json=data.model_dump())
-        tokens = AuthTokens.model_validate(raw)
-        self._access_token = tokens.access_token
-        if self._on_token_refresh:
-            self._on_token_refresh(tokens)
-        return tokens
-
-    def login(self, data: LoginRequest) -> AuthTokens:
-        """Authenticate with email and password. Stores tokens on the client."""
-        raw = self._unauth_request("POST", "/v1/auth/login", json=data.model_dump())
-        tokens = AuthTokens.model_validate(raw)
-        self._access_token = tokens.access_token
-        if self._on_token_refresh:
-            self._on_token_refresh(tokens)
-        return tokens
-
-    def request_magic_link(self, data: MagicLinkRequest) -> MagicLinkResponse:
-        """Send a magic-link email."""
-        raw = self._unauth_request("POST", "/v1/auth/magic-link", json=data.model_dump())
-        return MagicLinkResponse.model_validate(raw)
-
-    def verify_magic_link(self, data: MagicLinkVerifyRequest) -> AuthTokens:
-        """Exchange a magic-link token for auth tokens."""
-        raw = self._unauth_request("POST", "/v1/auth/magic-link/verify", json=data.model_dump())
-        tokens = AuthTokens.model_validate(raw)
-        self._access_token = tokens.access_token
-        if self._on_token_refresh:
-            self._on_token_refresh(tokens)
-        return tokens
 
     def refresh(self) -> AuthTokens:
         """Refresh the access token using the httpOnly refresh cookie."""
@@ -373,23 +330,6 @@ class PigeonsClient:
         raw = self._request("POST", "/v1/templates/preview", json=data.model_dump())
         return PreviewTemplateResponse.model_validate(raw)
 
-    # -- Billing --------------------------------------------------------------
-
-    def create_checkout(self, data: CheckoutRequest) -> CheckoutResponse:
-        """Create a Stripe checkout session."""
-        raw = self._request("POST", "/v1/billing/checkout", json=data.model_dump())
-        return CheckoutResponse.model_validate(raw)
-
-    def create_portal(self, data: PortalRequest) -> PortalResponse:
-        """Create a Stripe customer portal session."""
-        raw = self._request("POST", "/v1/billing/portal", json=data.model_dump())
-        return PortalResponse.model_validate(raw)
-
-    def billing_status(self) -> BillingStatus:
-        """Get the current billing status and limits."""
-        data = self._request("GET", "/v1/billing/status")
-        return BillingStatus.model_validate(data)
-
     # -- User -----------------------------------------------------------------
 
     def get_me(self) -> User:
@@ -401,8 +341,3 @@ class PigeonsClient:
         """Update the authenticated user's profile."""
         raw = self._request("PATCH", "/v1/me", json=data.model_dump(exclude_unset=True))
         return User.model_validate(raw)
-
-    def get_stats(self) -> DashboardStats:
-        """Get aggregated dashboard statistics."""
-        data = self._request("GET", "/v1/stats")
-        return DashboardStats.model_validate(data)

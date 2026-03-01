@@ -9,7 +9,7 @@ import pytest
 
 from pgns.sdk.async_client import AsyncPigeonsClient
 from pgns.sdk.errors import PigeonsError
-from pgns.sdk.models import CreateRoost, LoginRequest, UpdateRoost
+from pgns.sdk.models import CreateRoost, UpdateRoost
 from pgns.sdk.tests.conftest import (
     API_KEY,
     BASE_URL,
@@ -75,21 +75,6 @@ async def test_error_handling() -> None:
     with pytest.raises(PigeonsError) as exc_info:
         await client.get_roost("nonexistent")
     assert exc_info.value.status == 404
-
-
-@pytest.mark.asyncio
-async def test_login() -> None:
-    tokens_data = {"access_token": "async_jwt", "token_type": "Bearer", "expires_in": 3600}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/v1/auth/login"
-        return httpx.Response(200, json=tokens_data)
-
-    transport = httpx.MockTransport(handler)
-    http = httpx.AsyncClient(transport=transport)
-    client = AsyncPigeonsClient(BASE_URL, http_client=http)
-    tokens = await client.login(LoginRequest(email="test@example.com", password="secret"))
-    assert tokens.access_token == "async_jwt"
 
 
 @pytest.mark.asyncio

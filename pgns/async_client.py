@@ -15,30 +15,19 @@ from pgns.sdk.models import (
     ApiKeyCreatedResponse,
     ApiKeyResponse,
     AuthTokens,
-    BillingStatus,
-    CheckoutRequest,
-    CheckoutResponse,
     CreateApiKeyRequest,
     CreateDestination,
     CreateRoost,
     CreateTemplate,
-    DashboardStats,
     Destination,
-    LoginRequest,
-    MagicLinkRequest,
-    MagicLinkResponse,
-    MagicLinkVerifyRequest,
     PaginatedDeliveryAttempts,
     PaginatedPigeons,
     PauseResponse,
     Pigeon,
-    PortalRequest,
-    PortalResponse,
     PreviewTemplateRequest,
     PreviewTemplateResponse,
     ReplayResponse,
     Roost,
-    SignupRequest,
     Template,
     UpdateApiKeyRequest,
     UpdateProfileRequest,
@@ -147,40 +136,6 @@ class AsyncPigeonsClient:
         return _handle_response(response)
 
     # -- Auth -----------------------------------------------------------------
-
-    async def signup(self, data: SignupRequest) -> AuthTokens:
-        """Create a new account. Stores tokens on the client."""
-        raw = await self._unauth_request("POST", "/v1/auth/signup", json=data.model_dump())
-        tokens = AuthTokens.model_validate(raw)
-        self._access_token = tokens.access_token
-        if self._on_token_refresh:
-            self._on_token_refresh(tokens)
-        return tokens
-
-    async def login(self, data: LoginRequest) -> AuthTokens:
-        """Authenticate with email and password. Stores tokens on the client."""
-        raw = await self._unauth_request("POST", "/v1/auth/login", json=data.model_dump())
-        tokens = AuthTokens.model_validate(raw)
-        self._access_token = tokens.access_token
-        if self._on_token_refresh:
-            self._on_token_refresh(tokens)
-        return tokens
-
-    async def request_magic_link(self, data: MagicLinkRequest) -> MagicLinkResponse:
-        """Send a magic-link email."""
-        raw = await self._unauth_request("POST", "/v1/auth/magic-link", json=data.model_dump())
-        return MagicLinkResponse.model_validate(raw)
-
-    async def verify_magic_link(self, data: MagicLinkVerifyRequest) -> AuthTokens:
-        """Exchange a magic-link token for auth tokens."""
-        raw = await self._unauth_request(
-            "POST", "/v1/auth/magic-link/verify", json=data.model_dump()
-        )
-        tokens = AuthTokens.model_validate(raw)
-        self._access_token = tokens.access_token
-        if self._on_token_refresh:
-            self._on_token_refresh(tokens)
-        return tokens
 
     async def refresh(self) -> AuthTokens:
         """Refresh the access token using the httpOnly refresh cookie."""
@@ -351,20 +306,6 @@ class AsyncPigeonsClient:
         raw = await self._request("POST", "/v1/templates/preview", json=data.model_dump())
         return PreviewTemplateResponse.model_validate(raw)
 
-    # -- Billing --------------------------------------------------------------
-
-    async def create_checkout(self, data: CheckoutRequest) -> CheckoutResponse:
-        raw = await self._request("POST", "/v1/billing/checkout", json=data.model_dump())
-        return CheckoutResponse.model_validate(raw)
-
-    async def create_portal(self, data: PortalRequest) -> PortalResponse:
-        raw = await self._request("POST", "/v1/billing/portal", json=data.model_dump())
-        return PortalResponse.model_validate(raw)
-
-    async def billing_status(self) -> BillingStatus:
-        data = await self._request("GET", "/v1/billing/status")
-        return BillingStatus.model_validate(data)
-
     # -- User -----------------------------------------------------------------
 
     async def get_me(self) -> User:
@@ -374,7 +315,3 @@ class AsyncPigeonsClient:
     async def update_me(self, data: UpdateProfileRequest) -> User:
         raw = await self._request("PATCH", "/v1/me", json=data.model_dump(exclude_unset=True))
         return User.model_validate(raw)
-
-    async def get_stats(self) -> DashboardStats:
-        data = await self._request("GET", "/v1/stats")
-        return DashboardStats.model_validate(data)

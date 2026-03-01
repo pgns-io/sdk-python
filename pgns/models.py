@@ -38,30 +38,6 @@ class AuthTokens(BaseModel):
     expires_in: int
 
 
-class SignupRequest(BaseModel):
-    email: str
-    password: str
-    name: str | None = None
-    tos_accepted: bool
-
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-
-class MagicLinkRequest(BaseModel):
-    email: str
-
-
-class MagicLinkVerifyRequest(BaseModel):
-    token: str
-
-
-class MagicLinkResponse(BaseModel):
-    message: str
-
-
 # ---------------------------------------------------------------------------
 # Domain models
 # ---------------------------------------------------------------------------
@@ -205,15 +181,6 @@ class ReplayResponse(BaseModel):
     delivery_attempts: int
 
 
-class DashboardStats(BaseModel):
-    total_roosts: int
-    active_roosts: int
-    total_pigeons: int
-    pigeons_today: int
-    delivered: int
-    failed: int
-
-
 class PauseResponse(BaseModel):
     is_paused: bool
 
@@ -268,43 +235,3 @@ class PreviewTemplateRequest(BaseModel):
 
 class PreviewTemplateResponse(BaseModel):
     rendered: str
-
-
-# ---------------------------------------------------------------------------
-# Billing
-# ---------------------------------------------------------------------------
-
-
-class BillingLimits(BaseModel):
-    pigeons_per_month: int
-    max_roosts: int
-    api_per_minute: int
-    inbound_per_second: int
-    email_per_month: int
-
-
-class BillingStatus(BaseModel):
-    plan: str
-    subscription_status: str
-    billing_period_start: str | None = None
-    billing_period_end: str | None = None
-    usage_count: int
-    limits: BillingLimits
-
-
-class CheckoutRequest(BaseModel):
-    price_id: str
-    success_url: str
-    cancel_url: str
-
-
-class CheckoutResponse(BaseModel):
-    checkout_url: str
-
-
-class PortalRequest(BaseModel):
-    return_url: str
-
-
-class PortalResponse(BaseModel):
-    portal_url: str

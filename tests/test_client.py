@@ -12,8 +12,6 @@ from pgns.sdk.client import PigeonsClient
 from pgns.sdk.errors import PigeonsError
 from pgns.sdk.models import (
     CreateRoost,
-    LoginRequest,
-    SignupRequest,
     UpdateRoost,
 )
 from pgns.sdk.tests.conftest import (
@@ -49,36 +47,6 @@ class TestAuth:
         http = httpx.Client(transport=transport)
         client = PigeonsClient(BASE_URL, access_token=token, http_client=http)
         client.list_roosts()
-
-    def test_signup(self) -> None:
-        tokens_data = {"access_token": "new_token", "token_type": "Bearer", "expires_in": 3600}
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            assert request.url.path == "/v1/auth/signup"
-            body = json.loads(request.content)
-            assert body["email"] == "test@example.com"
-            return httpx.Response(201, json=tokens_data)
-
-        transport = httpx.MockTransport(handler)
-        http = httpx.Client(transport=transport)
-        client = PigeonsClient(BASE_URL, http_client=http)
-        tokens = client.signup(
-            SignupRequest(email="test@example.com", password="secret", tos_accepted=True)
-        )
-        assert tokens.access_token == "new_token"
-
-    def test_login(self) -> None:
-        tokens_data = {"access_token": "jwt_token", "token_type": "Bearer", "expires_in": 3600}
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            assert request.url.path == "/v1/auth/login"
-            return httpx.Response(200, json=tokens_data)
-
-        transport = httpx.MockTransport(handler)
-        http = httpx.Client(transport=transport)
-        client = PigeonsClient(BASE_URL, http_client=http)
-        tokens = client.login(LoginRequest(email="test@example.com", password="secret"))
-        assert tokens.access_token == "jwt_token"
 
     def test_logout(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
@@ -314,22 +282,3 @@ class TestUserAndStats:
         client = make_client(handler)
         user = client.get_me()
         assert user.email == "test@example.com"
-
-    def test_get_stats(self) -> None:
-        stats = {
-            "total_roosts": 5,
-            "active_roosts": 3,
-            "total_pigeons": 100,
-            "pigeons_today": 10,
-            "delivered": 90,
-            "failed": 5,
-        }
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            assert request.url.path == "/v1/stats"
-            return httpx.Response(200, json=stats)
-
-        client = make_client(handler)
-        result = client.get_stats()
-        assert result.total_roosts == 5
-        assert result.delivered == 90

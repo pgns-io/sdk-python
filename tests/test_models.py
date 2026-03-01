@@ -8,7 +8,6 @@ import pytest
 
 from pgns.sdk.models import (
     AuthTokens,
-    BillingStatus,
     CreateDestination,
     CreateRoost,
     DeliveryAttempt,
@@ -108,25 +107,6 @@ class TestResponseModels:
         data = {"access_token": "tok", "token_type": "Bearer", "expires_in": 3600}
         tokens = AuthTokens.model_validate(data)
         assert tokens.expires_in == 3600
-
-    def test_billing_status(self) -> None:
-        data = {
-            "plan": "pro",
-            "subscription_status": "active",
-            "billing_period_start": "2024-01-01T00:00:00Z",
-            "billing_period_end": "2024-02-01T00:00:00Z",
-            "usage_count": 42,
-            "limits": {
-                "pigeons_per_month": 10000,
-                "max_roosts": 50,
-                "api_per_minute": 1000,
-                "inbound_per_second": 100,
-                "email_per_month": 500,
-            },
-        }
-        status = BillingStatus.model_validate(data)
-        assert status.limits.pigeons_per_month == 10000
-        assert status.usage_count == 42
 
     def test_paginated_pigeons(self) -> None:
         pigeon_data: dict[str, Any] = {
