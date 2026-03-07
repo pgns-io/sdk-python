@@ -26,7 +26,9 @@ def _handle_response(response: httpx.Response) -> Any:
         try:
             body = response.json()
             message = body.get("error", response.reason_phrase or "Unknown error")
+            code = body.get("code")
         except Exception:
             message = response.reason_phrase or "Unknown error"
-        raise PigeonsError(message, response.status_code)
+            code = None
+        raise PigeonsError(message, response.status_code, code=code)
     return response.json()

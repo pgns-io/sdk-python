@@ -50,7 +50,6 @@ SAMPLE_PIGEON: dict[str, Any] = {
     "body_json": {"hello": "world"},
     "body_raw": None,
     "request_query": None,
-    "filtered": False,
     "replayed_from": None,
     "delivery_status": "delivered",
     "received_at": "2024-01-01T00:00:00Z",
@@ -59,6 +58,7 @@ SAMPLE_PIGEON: dict[str, Any] = {
 SAMPLE_DESTINATION: dict[str, Any] = {
     "id": "dest_abc123",
     "roost_id": "roost_abc123",
+    "name": "My Webhook",
     "destination_type": "url",
     "config": {"url": "https://example.com/webhook"},
     "filter_expression": "",
@@ -67,6 +67,7 @@ SAMPLE_DESTINATION: dict[str, Any] = {
     "retry_delay_ms": 1000,
     "retry_multiplier": 2.0,
     "is_paused": False,
+    "is_verified": True,
     "created_at": "2024-01-01T00:00:00Z",
     "updated_at": "2024-01-01T00:00:00Z",
 }
@@ -85,7 +86,6 @@ SAMPLE_USER: dict[str, Any] = {
     "email": "test@example.com",
     "name": "Test User",
     "plan": "free",
-    "tos_accepted_at": "2024-01-01T00:00:00Z",
     "created_at": "2024-01-01T00:00:00Z",
     "updated_at": "2024-01-01T00:00:00Z",
 }

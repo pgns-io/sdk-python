@@ -3,7 +3,7 @@
 from pgns.sdk._version import __version__
 from pgns.sdk.async_client import AsyncPigeonsClient
 from pgns.sdk.client import PigeonsClient
-from pgns.sdk.errors import PigeonsAuthError, PigeonsError
+from pgns.sdk.errors import PigeonsAuthError, PigeonsError, WebhookVerificationError
 from pgns.sdk.events import async_event_stream, event_stream
 from pgns.sdk.models import (
     ApiKeyCreatedResponse,
@@ -25,13 +25,16 @@ from pgns.sdk.models import (
     PreviewTemplateResponse,
     ReplayResponse,
     Roost,
+    SendResponse,
     Template,
     UpdateApiKeyRequest,
+    UpdateDestination,
     UpdateProfileRequest,
     UpdateRoost,
     UpdateTemplate,
     User,
 )
+from pgns.sdk.webhook import Webhook
 
 __all__ = [
     "__version__",
@@ -41,6 +44,9 @@ __all__ = [
     # Errors
     "PigeonsError",
     "PigeonsAuthError",
+    "WebhookVerificationError",
+    # Webhook
+    "Webhook",
     # Events
     "event_stream",
     "async_event_stream",
@@ -62,12 +68,14 @@ __all__ = [
     "CreateRoost",
     "UpdateRoost",
     "CreateDestination",
+    "UpdateDestination",
     "UpdateProfileRequest",
     "CreateApiKeyRequest",
     "UpdateApiKeyRequest",
     # Responses
     "ReplayResponse",
     "PauseResponse",
+    "SendResponse",
     # Pagination
     "PaginatedPigeons",
     "PaginatedDeliveryAttempts",

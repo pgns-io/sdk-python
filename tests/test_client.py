@@ -273,6 +273,69 @@ class TestTemplates:
         assert result.rendered == "hello world"
 
 
+class TestSend:
+    def test_send_signed_webhook(self) -> None:
+        """send() computes HMAC-SHA256 and sets correct headers."""
+        import hashlib
+        import hmac as hmac_mod
+
+        captured: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["url"] = str(request.url)
+            captured["headers"] = dict(request.headers)
+            captured["body"] = request.content.decode()
+            return httpx.Response(
+                200,
+                json={"id": "pgn_test123", "status": "received", "destinations": 1},
+            )
+
+        client = make_client(handler)
+        result = client.send(
+            "rst_abc",
+            event_type="order.created",
+            payload={"order_id": "123"},
+            signing_secret="test-secret",
+        )
+
+        assert result.id == "pgn_test123"
+        assert result.status == "received"
+        assert result.destinations == 1
+        assert captured["url"].endswith("/r/rst_abc")
+        assert captured["headers"]["x-pigeon-event-type"] == "order.created"
+        assert captured["headers"]["x-pigeon-signature"].startswith("sha256=")
+
+        # Verify the legacy HMAC is correct
+        ts = captured["headers"]["x-pigeon-timestamp"]
+        body = captured["body"]
+        expected_sig = hmac_mod.new(
+            b"test-secret",
+            f"{ts}.{body}".encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        assert captured["headers"]["x-pigeon-signature"] == f"sha256={expected_sig}"
+
+        # Verify Standard Webhooks headers
+        import base64
+        import re
+
+        msg_id = captured["headers"]["webhook-id"]
+        assert re.match(r"^msg_[0-9a-f-]{36}$", msg_id)
+        assert captured["headers"]["webhook-timestamp"] == ts
+        wh_sig = captured["headers"]["webhook-signature"]
+        assert wh_sig.startswith("v1,")
+
+        # Verify Standard Webhooks HMAC
+        expected_std = base64.b64encode(
+            hmac_mod.new(
+                b"test-secret",
+                f"{msg_id}.{ts}.{body}".encode(),
+                hashlib.sha256,
+            ).digest()
+        ).decode()
+        assert wh_sig == f"v1,{expected_std}"
+
+
 class TestUserAndStats:
     def test_get_me(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:

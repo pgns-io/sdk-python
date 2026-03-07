@@ -62,7 +62,6 @@ class TestResponseModels:
             "body_json": {"key": "value"},
             "body_raw": None,
             "request_query": None,
-            "filtered": False,
             "replayed_from": None,
             "delivery_status": "delivered",
             "received_at": "2024-01-01T00:00:00Z",
@@ -75,6 +74,7 @@ class TestResponseModels:
         data = {
             "id": "d1",
             "roost_id": "r1",
+            "name": "Slack Alerts",
             "destination_type": "slack",
             "config": {"webhook_url": "https://hooks.slack.com/..."},
             "filter_expression": "",
@@ -83,6 +83,7 @@ class TestResponseModels:
             "retry_delay_ms": 1000,
             "retry_multiplier": 2.0,
             "is_paused": False,
+            "is_verified": True,
             "created_at": "2024-01-01T00:00:00Z",
             "updated_at": "2024-01-01T00:00:00Z",
         }
@@ -95,13 +96,11 @@ class TestResponseModels:
             "email": "a@b.com",
             "name": "Alice",
             "plan": "pro",
-            "tos_accepted_at": None,
             "created_at": "2024-01-01T00:00:00Z",
             "updated_at": "2024-01-01T00:00:00Z",
         }
         user = User.model_validate(data)
         assert user.plan == "pro"
-        assert user.tos_accepted_at is None
 
     def test_auth_tokens(self) -> None:
         data = {"access_token": "tok", "token_type": "Bearer", "expires_in": 3600}
@@ -119,7 +118,6 @@ class TestResponseModels:
             "body_json": None,
             "body_raw": None,
             "request_query": None,
-            "filtered": False,
             "replayed_from": None,
             "delivery_status": "pending",
             "received_at": "2024-01-01T00:00:00Z",

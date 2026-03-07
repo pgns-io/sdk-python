@@ -28,8 +28,10 @@ from pgns.sdk.models import (
     PreviewTemplateResponse,
     ReplayResponse,
     Roost,
+    SendResponse,
     Template,
     UpdateApiKeyRequest,
+    UpdateDestination,
     UpdateProfileRequest,
     UpdateRoost,
     UpdateTemplate,
@@ -246,6 +248,14 @@ class AsyncPigeonsClient:
         )
         return PauseResponse.model_validate(data)
 
+    async def update_destination(self, destination_id: str, data: UpdateDestination) -> Destination:
+        raw = await self._request(
+            "PATCH",
+            f"/v1/destinations/{quote(destination_id, safe='')}",
+            json=data.model_dump(exclude_unset=True),
+        )
+        return Destination.model_validate(raw)
+
     async def delete_destination(self, destination_id: str) -> None:
         await self._request("DELETE", f"/v1/destinations/{quote(destination_id, safe='')}")
 
@@ -315,3 +325,68 @@ class AsyncPigeonsClient:
     async def update_me(self, data: UpdateProfileRequest) -> User:
         raw = await self._request("PATCH", "/v1/me", json=data.model_dump(exclude_unset=True))
         return User.model_validate(raw)
+
+    # -- Send (Inbound Webhook) -----------------------------------------------
+
+    async def send(
+        self,
+        roost_id: str,
+        *,
+        event_type: str,
+        payload: Any,
+        signing_secret: str,
+    ) -> SendResponse:
+        """Send a signed webhook to a roost.
+
+        Computes dual signatures: legacy ``X-Pigeon-Signature`` (hex) and
+        Standard Webhooks ``webhook-signature`` (base64). Both header sets
+        are sent for backward compatibility.
+        """
+        import base64
+        import hashlib
+        import hmac as hmac_mod
+        import json
+        import time
+        import uuid
+
+        body = json.dumps(payload, separators=(",", ":"))
+        timestamp = str(int(time.time()))
+        msg_id = f"msg_{uuid.uuid4()}"
+
+        # Decode signing key
+        if signing_secret.startswith("whsec_"):
+            key_bytes = base64.b64decode(signing_secret[6:])
+        else:
+            key_bytes = signing_secret.encode()
+
+        # Legacy signature: HMAC-SHA256("{timestamp}.{body}") → hex
+        legacy_sig = hmac_mod.new(
+            key_bytes,
+            f"{timestamp}.{body}".encode(),
+            hashlib.sha256,
+        ).hexdigest()
+
+        # Standard Webhooks signature: HMAC-SHA256("{msg_id}.{timestamp}.{body}") → base64
+        std_sig = base64.b64encode(
+            hmac_mod.new(
+                key_bytes,
+                f"{msg_id}.{timestamp}.{body}".encode(),
+                hashlib.sha256,
+            ).digest()
+        ).decode()
+
+        response = await self._http.post(
+            f"{self._base_url}/r/{quote(roost_id, safe='')}",
+            headers={
+                "Content-Type": "application/json",
+                "X-Pigeon-Signature": f"sha256={legacy_sig}",
+                "X-Pigeon-Timestamp": timestamp,
+                "X-Pigeon-Event-Type": event_type,
+                "webhook-id": msg_id,
+                "webhook-timestamp": timestamp,
+                "webhook-signature": f"v1,{std_sig}",
+            },
+            content=body,
+        )
+        data = _handle_response(response)
+        return SendResponse.model_validate(data)
