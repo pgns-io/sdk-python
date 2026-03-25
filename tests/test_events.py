@@ -1,3 +1,6 @@
+# Copyright (c) 2026 PGNS LLC
+# SPDX-License-Identifier: MIT
+
 """Tests for SSE event streaming."""
 
 from __future__ import annotations

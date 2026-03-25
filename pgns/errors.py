@@ -1,6 +1,15 @@
+# Copyright (c) 2026 PGNS LLC
+# SPDX-License-Identifier: MIT
+
 """Errors raised by the pgns SDK."""
 
 from __future__ import annotations
+
+__all__ = [
+    "PigeonsError",
+    "PigeonsAuthError",
+    "WebhookVerificationError",
+]
 
 
 class PigeonsError(Exception):

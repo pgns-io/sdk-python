@@ -1,3 +1,6 @@
+# Copyright (c) 2026 PGNS LLC
+# SPDX-License-Identifier: MIT
+
 """Shared test fixtures for the pgns SDK."""
 
 from __future__ import annotations
@@ -7,8 +10,8 @@ from typing import Any
 
 import httpx
 
-from pgns.sdk.async_client import AsyncPigeonsClient
-from pgns.sdk.client import PigeonsClient
+from pgns.async_client import AsyncPigeonsClient
+from pgns.client import PigeonsClient
 
 BASE_URL = "https://api.pgns.io"
 API_KEY = "pk_live_test1234567890abcdefghijklmnopqrstuvwxyz1234"
@@ -86,6 +89,7 @@ SAMPLE_USER: dict[str, Any] = {
     "email": "test@example.com",
     "name": "Test User",
     "plan": "free",
+    "mfa_enabled": False,
     "created_at": "2024-01-01T00:00:00Z",
     "updated_at": "2024-01-01T00:00:00Z",
 }
@@ -95,6 +99,30 @@ SAMPLE_TEMPLATE: dict[str, Any] = {
     "name": "Test Template",
     "description": "A test template",
     "body": "{{ body }}",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z",
+}
+
+SAMPLE_APPLICATION: dict[str, Any] = {
+    "id": "app_abc123",
+    "user_id": "user_abc123",
+    "roost_id": "roost_abc123",
+    "external_id": None,
+    "name": "Test Application",
+    "metadata": {},
+    "signing_key": "whsec_test123",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z",
+}
+
+SAMPLE_ENDPOINT: dict[str, Any] = {
+    "id": "ep_abc123",
+    "application_id": "app_abc123",
+    "destination_id": "dest_abc123",
+    "customer_id": "cust_abc123",
+    "subscribed_events": ["order.created", "order.updated"],
+    "signing_secret": None,
+    "metadata": {},
     "created_at": "2024-01-01T00:00:00Z",
     "updated_at": "2024-01-01T00:00:00Z",
 }

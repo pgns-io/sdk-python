@@ -1,6 +1,11 @@
+# Copyright (c) 2026 PGNS LLC
+# SPDX-License-Identifier: MIT
+
 """Webhook signature verification for pgns consumers."""
 
 from __future__ import annotations
+
+__all__ = ["Webhook"]
 
 import base64
 import hashlib
@@ -10,7 +15,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from pgns.sdk.errors import WebhookVerificationError
+from pgns.errors import WebhookVerificationError
 
 type _HeaderGetter = Callable[[str], str | None]
 

@@ -1,6 +1,11 @@
+# Copyright (c) 2026 PGNS LLC
+# SPDX-License-Identifier: MIT
+
 """Synchronous client for the pgns API."""
 
 from __future__ import annotations
+
+__all__ = ["PigeonsClient"]
 
 import threading
 from collections.abc import Callable
@@ -9,33 +14,45 @@ from urllib.parse import quote
 
 import httpx
 
-from pgns.sdk._client import _auth_headers, _handle_response
-from pgns.sdk.errors import PigeonsAuthError, PigeonsError
-from pgns.sdk.models import (
+from pgns._client import _auth_headers, _handle_response
+from pgns.errors import PigeonsAuthError, PigeonsError
+from pgns.models import (
+    AgentCard,
     ApiKeyCreatedResponse,
     ApiKeyResponse,
+    Application,
     AuthTokens,
+    CreateAgentCard,
     CreateApiKeyRequest,
+    CreateApplication,
     CreateDestination,
+    CreateEndpoint,
     CreateRoost,
     CreateTemplate,
     Destination,
+    Endpoint,
+    HealthThresholds,
     PaginatedDeliveryAttempts,
     PaginatedPigeons,
     PauseResponse,
     Pigeon,
     PreviewTemplateRequest,
     PreviewTemplateResponse,
+    PublishMessage,
+    PublishResponse,
     ReplayResponse,
     Roost,
+    RoostHealth,
     SendResponse,
     Template,
+    UpdateAgentCard,
     UpdateApiKeyRequest,
     UpdateDestination,
     UpdateProfileRequest,
     UpdateRoost,
     UpdateTemplate,
     User,
+    ValidateSchemaResponse,
 )
 
 
@@ -183,6 +200,17 @@ class PigeonsClient:
     def delete_roost(self, roost_id: str) -> None:
         """Delete a roost and all its destinations."""
         self._request("DELETE", f"/v1/roosts/{quote(roost_id, safe='')}")
+
+    def validate_roost_schema(
+        self, roost_id: str, payload: dict[str, Any]
+    ) -> ValidateSchemaResponse:
+        """Validate a payload against a roost's JSON Schema."""
+        raw = self._request(
+            "POST",
+            f"/v1/roosts/{quote(roost_id, safe='')}/schema/validate",
+            json={"payload": payload},
+        )
+        return ValidateSchemaResponse.model_validate(raw)
 
     # -- Pigeons --------------------------------------------------------------
 
@@ -353,6 +381,82 @@ class PigeonsClient:
         raw = self._request("PATCH", "/v1/me", json=data.model_dump(exclude_unset=True))
         return User.model_validate(raw)
 
+    # -- Applications (Outbound Webhooks) ------------------------------------
+
+    def list_applications(self) -> list[Application]:
+        """List all outbound webhook applications."""
+        data = self._request("GET", "/v1/applications")
+        return [Application.model_validate(a) for a in data]
+
+    def get_application(self, app_id: str) -> Application:
+        """Get an application by ID."""
+        data = self._request("GET", f"/v1/applications/{quote(app_id, safe='')}")
+        return Application.model_validate(data)
+
+    def create_application(self, data: CreateApplication) -> Application:
+        """Create a new outbound webhook application."""
+        raw = self._request("POST", "/v1/applications", json=data.model_dump(exclude_none=True))
+        return Application.model_validate(raw)
+
+    def delete_application(self, app_id: str) -> None:
+        """Delete an application."""
+        self._request("DELETE", f"/v1/applications/{quote(app_id, safe='')}")
+
+    # -- Endpoints -----------------------------------------------------------
+
+    def list_endpoints(self, app_id: str, *, customer_id: str | None = None) -> list[Endpoint]:
+        """List endpoints for an application, optionally filtered by customer."""
+        qs = f"?customer_id={quote(customer_id, safe='')}" if customer_id else ""
+        data = self._request("GET", f"/v1/applications/{quote(app_id, safe='')}/endpoints{qs}")
+        return [Endpoint.model_validate(e) for e in data]
+
+    def create_endpoint(self, app_id: str, data: CreateEndpoint) -> Endpoint:
+        """Create a new endpoint within an application."""
+        raw = self._request(
+            "POST",
+            f"/v1/applications/{quote(app_id, safe='')}/endpoints",
+            json=data.model_dump(exclude_none=True),
+        )
+        return Endpoint.model_validate(raw)
+
+    def delete_endpoint(self, app_id: str, endpoint_id: str) -> None:
+        """Delete an endpoint."""
+        self._request(
+            "DELETE",
+            f"/v1/applications/{quote(app_id, safe='')}/endpoints/{quote(endpoint_id, safe='')}",
+        )
+
+    def list_endpoint_attempts(
+        self,
+        app_id: str,
+        endpoint_id: str,
+        *,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> PaginatedDeliveryAttempts:
+        """List delivery attempts for an endpoint."""
+        params: list[str] = []
+        if limit is not None:
+            params.append(f"limit={limit}")
+        if cursor:
+            params.append(f"cursor={quote(cursor, safe='')}")
+        qs = f"?{'&'.join(params)}" if params else ""
+        app = quote(app_id, safe="")
+        ep = quote(endpoint_id, safe="")
+        data = self._request("GET", f"/v1/applications/{app}/endpoints/{ep}/attempts{qs}")
+        return PaginatedDeliveryAttempts.model_validate(data)
+
+    # -- Messages ------------------------------------------------------------
+
+    def publish_message(self, app_id: str, data: PublishMessage) -> PublishResponse:
+        """Publish an event to matching customer endpoints."""
+        raw = self._request(
+            "POST",
+            f"/v1/applications/{quote(app_id, safe='')}/messages",
+            json=data.model_dump(),
+        )
+        return PublishResponse.model_validate(raw)
+
     # -- Send (Inbound Webhook) -----------------------------------------------
 
     def send(
@@ -362,6 +466,7 @@ class PigeonsClient:
         event_type: str,
         payload: Any,
         signing_secret: str,
+        extra_headers: dict[str, str] | None = None,
     ) -> SendResponse:
         """Send a signed webhook to a roost.
 
@@ -402,9 +507,9 @@ class PigeonsClient:
             ).digest()
         ).decode()
 
-        response = self._http.post(
-            f"{self._base_url}/r/{quote(roost_id, safe='')}",
-            headers={
+        headers = dict(extra_headers or {})
+        headers.update(
+            {
                 "Content-Type": "application/json",
                 "X-Pigeon-Signature": f"sha256={legacy_sig}",
                 "X-Pigeon-Timestamp": timestamp,
@@ -412,8 +517,64 @@ class PigeonsClient:
                 "webhook-id": msg_id,
                 "webhook-timestamp": timestamp,
                 "webhook-signature": f"v1,{std_sig}",
-            },
+            }
+        )
+
+        response = self._http.post(
+            f"{self._base_url}/r/{quote(roost_id, safe='')}",
+            headers=headers,
             content=body,
         )
         data = _handle_response(response)
         return SendResponse.model_validate(data)
+
+    # -- Agent Cards ----------------------------------------------------------
+
+    def list_agents(self) -> list[AgentCard]:
+        """List all agent cards for the authenticated user."""
+        data = self._request("GET", "/v1/agents")
+        return [AgentCard.model_validate(a) for a in data]
+
+    def create_agent(self, data: CreateAgentCard) -> AgentCard:
+        """Create a new agent card."""
+        raw = self._request("POST", "/v1/agents", json=data.model_dump(exclude_none=True))
+        return AgentCard.model_validate(raw)
+
+    def get_agent(self, agent_id: str) -> AgentCard:
+        """Get an agent card by ID."""
+        raw = self._request("GET", f"/v1/agents/{quote(agent_id, safe='')}")
+        return AgentCard.model_validate(raw)
+
+    def update_agent(self, agent_id: str, data: UpdateAgentCard) -> AgentCard:
+        """Update an agent card."""
+        raw = self._request(
+            "PATCH",
+            f"/v1/agents/{quote(agent_id, safe='')}",
+            json=data.model_dump(exclude_unset=True),
+        )
+        return AgentCard.model_validate(raw)
+
+    def delete_agent(self, agent_id: str) -> None:
+        """Delete an agent card."""
+        self._request("DELETE", f"/v1/agents/{quote(agent_id, safe='')}")
+
+    # -- Health ---------------------------------------------------------------
+
+    def get_roost_health(self, roost_id: str) -> RoostHealth:
+        """Get health metrics for a roost over the last 7-day window."""
+        raw = self._request("GET", f"/v1/roosts/{quote(roost_id, safe='')}/health")
+        return RoostHealth.model_validate(raw)
+
+    def get_health_thresholds(self, roost_id: str) -> HealthThresholds:
+        """Get the health thresholds configured for a roost."""
+        raw = self._request("GET", f"/v1/roosts/{quote(roost_id, safe='')}/health-thresholds")
+        return HealthThresholds.model_validate(raw)
+
+    def set_health_thresholds(self, roost_id: str, data: HealthThresholds) -> HealthThresholds:
+        """Set custom health thresholds for a roost."""
+        raw = self._request(
+            "PUT",
+            f"/v1/roosts/{quote(roost_id, safe='')}/health-thresholds",
+            json=data.model_dump(),
+        )
+        return HealthThresholds.model_validate(raw)

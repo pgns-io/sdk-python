@@ -1,3 +1,6 @@
+# Copyright (c) 2026 PGNS LLC
+# SPDX-License-Identifier: MIT
+
 """Tests for Pydantic model serialization and validation."""
 
 from __future__ import annotations
@@ -6,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from pgns.sdk.models import (
+from pgns.models import (
     AuthTokens,
     CreateDestination,
     CreateRoost,
@@ -96,6 +99,7 @@ class TestResponseModels:
             "email": "a@b.com",
             "name": "Alice",
             "plan": "pro",
+            "mfa_enabled": False,
             "created_at": "2024-01-01T00:00:00Z",
             "updated_at": "2024-01-01T00:00:00Z",
         }

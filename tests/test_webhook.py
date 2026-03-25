@@ -1,3 +1,6 @@
+# Copyright (c) 2026 PGNS LLC
+# SPDX-License-Identifier: MIT
+
 from __future__ import annotations
 
 import base64
@@ -7,8 +10,8 @@ import time
 
 import pytest
 
-from pgns.sdk.errors import WebhookVerificationError
-from pgns.sdk.webhook import Webhook
+from pgns.errors import WebhookVerificationError
+from pgns.webhook import Webhook
 
 SECRET = "test-secret"
 

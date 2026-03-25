@@ -1,3 +1,6 @@
+# Copyright (c) 2026 PGNS LLC
+# SPDX-License-Identifier: MIT
+
 """Shared helpers for sync and async clients."""
 
 from __future__ import annotations
@@ -6,7 +9,7 @@ from typing import Any
 
 import httpx
 
-from pgns.sdk.errors import PigeonsError
+from pgns.errors import PigeonsError
 
 
 def _auth_headers(api_key: str | None, access_token: str | None) -> dict[str, str]:

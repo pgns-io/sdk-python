@@ -1,3 +1,6 @@
+# Copyright (c) 2026 PGNS LLC
+# SPDX-License-Identifier: MIT
+
 """Tests for the synchronous PigeonsClient."""
 
 from __future__ import annotations
@@ -8,17 +11,22 @@ from typing import Any
 import httpx
 import pytest
 
-from pgns.sdk.client import PigeonsClient
-from pgns.sdk.errors import PigeonsError
-from pgns.sdk.models import (
+from pgns.client import PigeonsClient
+from pgns.errors import PigeonsError
+from pgns.models import (
+    CreateApplication,
+    CreateEndpoint,
     CreateRoost,
+    PublishMessage,
     UpdateRoost,
 )
-from pgns.sdk.tests.conftest import (
+from pgns.tests.conftest import (
     API_KEY,
     BASE_URL,
     SAMPLE_API_KEY,
+    SAMPLE_APPLICATION,
     SAMPLE_DESTINATION,
+    SAMPLE_ENDPOINT,
     SAMPLE_PIGEON,
     SAMPLE_ROOST,
     SAMPLE_TEMPLATE,
@@ -258,7 +266,7 @@ class TestTemplates:
         assert templates[0].name == "Test Template"
 
     def test_preview_template(self) -> None:
-        from pgns.sdk.models import PreviewTemplateRequest
+        from pgns.models import PreviewTemplateRequest
 
         def handler(request: httpx.Request) -> httpx.Response:
             body = json.loads(request.content)
@@ -345,3 +353,143 @@ class TestUserAndStats:
         client = make_client(handler)
         user = client.get_me()
         assert user.email == "test@example.com"
+
+
+class TestApplications:
+    def test_list_applications(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == "/v1/applications"
+            return httpx.Response(200, json=[SAMPLE_APPLICATION])
+
+        client = make_client(handler)
+        apps = client.list_applications()
+        assert len(apps) == 1
+        assert apps[0].id == "app_abc123"
+        assert apps[0].signing_key == "whsec_test123"
+
+    def test_get_application(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == "/v1/applications/app_abc123"
+            return httpx.Response(200, json=SAMPLE_APPLICATION)
+
+        client = make_client(handler)
+        app = client.get_application("app_abc123")
+        assert app.name == "Test Application"
+
+    def test_create_application(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            assert body["name"] == "My App"
+            assert "external_id" not in body  # exclude_none
+            return httpx.Response(201, json={**SAMPLE_APPLICATION, "name": "My App"})
+
+        client = make_client(handler)
+        app = client.create_application(CreateApplication(name="My App"))
+        assert app.name == "My App"
+
+    def test_delete_application(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.method == "DELETE"
+            assert request.url.path == "/v1/applications/app_abc123"
+            return httpx.Response(204)
+
+        client = make_client(handler)
+        client.delete_application("app_abc123")
+
+
+class TestEndpoints:
+    def test_list_endpoints(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == "/v1/applications/app_abc123/endpoints"
+            return httpx.Response(200, json=[SAMPLE_ENDPOINT])
+
+        client = make_client(handler)
+        eps = client.list_endpoints("app_abc123")
+        assert len(eps) == 1
+        assert eps[0].customer_id == "cust_abc123"
+
+    def test_list_endpoints_with_customer_filter(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "customer_id=cust_abc123" in str(request.url)
+            return httpx.Response(200, json=[SAMPLE_ENDPOINT])
+
+        client = make_client(handler)
+        client.list_endpoints("app_abc123", customer_id="cust_abc123")
+
+    def test_create_endpoint(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            assert body["url"] == "https://example.com/hook"
+            assert body["customer_id"] == "cust_abc123"
+            return httpx.Response(201, json=SAMPLE_ENDPOINT)
+
+        client = make_client(handler)
+        ep = client.create_endpoint(
+            "app_abc123",
+            CreateEndpoint(url="https://example.com/hook", customer_id="cust_abc123"),
+        )
+        assert ep.id == "ep_abc123"
+
+    def test_delete_endpoint(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.method == "DELETE"
+            assert request.url.path == "/v1/applications/app_abc123/endpoints/ep_abc123"
+            return httpx.Response(204)
+
+        client = make_client(handler)
+        client.delete_endpoint("app_abc123", "ep_abc123")
+
+    def test_list_endpoint_attempts(self) -> None:
+        paginated: dict[str, Any] = {
+            "data": [],
+            "next_cursor": None,
+            "has_more": False,
+        }
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "/endpoints/ep_abc123/attempts" in request.url.path
+            return httpx.Response(200, json=paginated)
+
+        client = make_client(handler)
+        result = client.list_endpoint_attempts("app_abc123", "ep_abc123")
+        assert result.has_more is False
+
+    def test_list_endpoint_attempts_with_pagination(self) -> None:
+        paginated: dict[str, Any] = {
+            "data": [],
+            "next_cursor": None,
+            "has_more": False,
+        }
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "limit=10" in str(request.url)
+            assert "cursor=abc" in str(request.url)
+            return httpx.Response(200, json=paginated)
+
+        client = make_client(handler)
+        client.list_endpoint_attempts("app_abc123", "ep_abc123", limit=10, cursor="abc")
+
+
+class TestPublishMessage:
+    def test_publish_message(self) -> None:
+        response_data = {"pigeon_id": "pgn_test123", "endpoints_matched": 3}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == "/v1/applications/app_abc123/messages"
+            body = json.loads(request.content)
+            assert body["event_type"] == "order.created"
+            assert body["customer_id"] == "cust_abc123"
+            assert body["data"] == {"order_id": "123"}
+            return httpx.Response(200, json=response_data)
+
+        client = make_client(handler)
+        result = client.publish_message(
+            "app_abc123",
+            PublishMessage(
+                event_type="order.created",
+                customer_id="cust_abc123",
+                data={"order_id": "123"},
+            ),
+        )
+        assert result.pigeon_id == "pgn_test123"
+        assert result.endpoints_matched == 3

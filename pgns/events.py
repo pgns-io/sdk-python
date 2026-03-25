@@ -1,6 +1,11 @@
+# Copyright (c) 2026 PGNS LLC
+# SPDX-License-Identifier: MIT
+
 """SSE event streaming for the pgns API."""
 
 from __future__ import annotations
+
+__all__ = ["event_stream", "async_event_stream"]
 
 import asyncio
 import time
@@ -20,7 +25,9 @@ def event_stream(
     """Connect to the pgns SSE event stream (synchronous).
 
     Yields each ``data:`` line as a string. Automatically reconnects on
-    failure with a 3-second delay. Break out of the iterator to disconnect.
+    failure with a 3-second delay. On reconnect, the ``Last-Event-ID`` header
+    is sent so the server can replay missed events. Break out of the iterator
+    to disconnect.
 
     Args:
         base_url: Base URL of the pgns API.
@@ -33,11 +40,16 @@ def event_stream(
     url = f"{base_url.rstrip('/')}/v1/events"
     if roost_id:
         url += f"?roost_id={roost_id}"
-    headers: dict[str, str] = {"Accept": "text/event-stream"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+
+    last_event_id: str | None = None
 
     while True:
+        headers: dict[str, str] = {"Accept": "text/event-stream"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        if last_event_id:
+            headers["Last-Event-ID"] = last_event_id
+
         try:
             with httpx.Client() as client:
                 with client.stream("GET", url, headers=headers, timeout=None) as response:
@@ -47,7 +59,9 @@ def event_stream(
                         buffer += chunk
                         while "\n" in buffer:
                             line, buffer = buffer.split("\n", 1)
-                            if line.startswith("data:"):
+                            if line.startswith("id:"):
+                                last_event_id = line[3:].strip()
+                            elif line.startswith("data:"):
                                 yield line[5:].strip()
         except GeneratorExit:
             return
@@ -69,11 +83,16 @@ async def async_event_stream(
     url = f"{base_url.rstrip('/')}/v1/events"
     if roost_id:
         url += f"?roost_id={roost_id}"
-    headers: dict[str, str] = {"Accept": "text/event-stream"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+
+    last_event_id: str | None = None
 
     while True:
+        headers: dict[str, str] = {"Accept": "text/event-stream"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        if last_event_id:
+            headers["Last-Event-ID"] = last_event_id
+
         try:
             async with httpx.AsyncClient() as client:
                 async with client.stream("GET", url, headers=headers, timeout=None) as response:
@@ -83,7 +102,9 @@ async def async_event_stream(
                         buffer += chunk
                         while "\n" in buffer:
                             line, buffer = buffer.split("\n", 1)
-                            if line.startswith("data:"):
+                            if line.startswith("id:"):
+                                last_event_id = line[3:].strip()
+                            elif line.startswith("data:"):
                                 yield line[5:].strip()
         except GeneratorExit:
             return
