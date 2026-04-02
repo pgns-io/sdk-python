@@ -59,12 +59,30 @@ __all__ = [
     "HealthMetrics",
     "HealthThresholds",
     "RoostHealth",
+    # Artifacts
+    "Artifact",
+    "CreateArtifactResponse",
+    "PaginatedArtifacts",
+    # Sagas
+    "Saga",
+    "SagaStep",
+    "CreateSaga",
+    "SagaInstance",
+    "SagaStepAttempt",
+    "SagaInstanceDetail",
+    "ExecuteSagaRequest",
+    "PaginatedSagaInstances",
 ]
 
+import warnings
 from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel
+
+# BaseModel.schema() is deprecated in Pydantic v2 (replaced by model_json_schema()).
+# Our API uses "schema" as a field name on Roost models, which triggers a UserWarning.
+warnings.filterwarnings("ignore", message='Field name "schema" in .* shadows an attribute')
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -134,8 +152,9 @@ class Roost(BaseModel):
     description: str
     secret: str | None = None
     source_type: SourceType | None = None
-    schema: dict[str, Any] | None = None  # type: ignore[assignment]  # shadows BaseModel.schema()
+    schema: dict[str, Any] | None = None  # type: ignore[assignment]
     agent_card_id: str | None = None
+    a2a_gateway: bool = False
     is_active: bool
     created_at: str
     updated_at: str
@@ -186,6 +205,8 @@ class DeliveryAttempt(BaseModel):
     response_status: int | None = None
     response_body: str | None = None
     response_headers: dict[str, str] | None = None
+    request_headers: dict[str, str] | None = None
+    request_body: str | None = None
     error_message: str | None = None
     attempted_at: str
     next_retry_at: str | None = None
@@ -225,6 +246,7 @@ class CreateRoost(BaseModel):
     source_type: SourceType | None = None
     schema: dict[str, Any] | None = None  # type: ignore[assignment]
     agent_card_id: str | None = None
+    managed_by: str | None = None
 
 
 class UpdateRoost(BaseModel):
@@ -234,7 +256,9 @@ class UpdateRoost(BaseModel):
     source_type: SourceType | None = None
     schema: dict[str, Any] | None = None  # type: ignore[assignment]
     agent_card_id: str | None = None
+    a2a_gateway: bool | None = None
     is_active: bool | None = None
+    managed_by: str | None = None
 
 
 class ValidateSchemaResponse(BaseModel):
@@ -253,6 +277,7 @@ class CreateDestination(BaseModel):
     retry_multiplier: float | None = None
     reply_roost_id: str | None = None
     reply_timeout_ms: int | None = None
+    managed_by: str | None = None
 
 
 class UpdateDestination(BaseModel):
@@ -264,6 +289,7 @@ class UpdateDestination(BaseModel):
     transform_code: str | None = None
     reply_roost_id: str | None = None
     reply_timeout_ms: int | None = None
+    managed_by: str | None = None
 
 
 class UpdateProfileRequest(BaseModel):
@@ -335,12 +361,14 @@ class CreateTemplate(BaseModel):
     name: str
     description: str | None = None
     body: str | None = None
+    managed_by: str | None = None
 
 
 class UpdateTemplate(BaseModel):
     name: str | None = None
     description: str | None = None
     body: str | None = None
+    managed_by: str | None = None
 
 
 class PreviewTemplateRequest(BaseModel):
@@ -373,6 +401,7 @@ class CreateApplication(BaseModel):
     name: str
     external_id: str | None = None
     metadata: dict[str, Any] | None = None
+    managed_by: str | None = None
 
 
 class Endpoint(BaseModel):
@@ -441,6 +470,7 @@ class CreateAgentCard(BaseModel):
     default_output_modes: list[str] | None = None
     security_schemes: dict[str, Any] | None = None
     metadata: dict[str, Any] | None = None
+    managed_by: str | None = None
 
 
 class UpdateAgentCard(BaseModel):
@@ -456,6 +486,7 @@ class UpdateAgentCard(BaseModel):
     security_schemes: dict[str, Any] | None = None
     metadata: dict[str, Any] | None = None
     is_active: bool | None = None
+    managed_by: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -495,3 +526,178 @@ class RoostHealth(BaseModel):
     metrics: HealthMetrics
     thresholds: HealthThresholds
     window_days: int
+
+
+# ---------------------------------------------------------------------------
+# Artifacts
+# ---------------------------------------------------------------------------
+
+
+class Artifact(BaseModel):
+    """Artifact metadata returned by the list endpoint."""
+
+    id: str
+    user_id: str
+    task_id: str | None = None
+    correlation_id: str | None = None
+    content_type: str
+    size_bytes: int
+    auto_delete: bool
+    consumed: bool
+    consumed_at: str | None = None
+    consumed_by: str | None = None
+    expires_at: str
+    created_at: str
+
+
+class CreateArtifactResponse(BaseModel):
+    """Response from POST /v1/artifacts."""
+
+    artifact_id: str
+    url: str
+    """Relative path to the artifact (e.g. ``/v1/artifacts/<id>``)."""
+    access_token: str
+    size_bytes: int
+    expires_at: str
+
+
+class PaginatedArtifacts(BaseModel):
+    data: list[Artifact]
+    next_cursor: str | None = None
+    has_more: bool
+
+
+# ---------------------------------------------------------------------------
+# Sagas
+# ---------------------------------------------------------------------------
+
+
+class SagaStep(BaseModel):
+    """A single step in a saga definition."""
+
+    name: str
+    forward: str
+    compensate: str
+
+
+class Saga(BaseModel):
+    """A saga workflow definition."""
+
+    id: str
+    user_id: str
+    name: str
+    description: str
+    timeout: str | None = None
+    steps: list[SagaStep]
+    managed_by: str | None = None
+    created_at: str
+
+
+class CreateSaga(BaseModel):
+    """Request body for creating a saga."""
+
+    name: str
+    description: str = ""
+    timeout: str | None = None
+    steps: list[SagaStep]
+    managed_by: str | None = None
+
+
+class SagaInstance(BaseModel):
+    """A running or completed saga instance."""
+
+    id: str
+    saga_id: str
+    user_id: str
+    correlation_id: str
+    status: str
+    current_step: int
+    payloads: dict[str, Any]
+    started_at: str
+    completed_at: str | None = None
+    updated_at: str
+
+
+class SagaStepAttempt(BaseModel):
+    """A single attempt at executing a saga step."""
+
+    id: str
+    instance_id: str
+    step_index: int
+    direction: str
+    pigeon_id: str | None = None
+    status: str
+    response_code: int | None = None
+    response_body: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class SagaInstanceDetail(BaseModel):
+    """Full saga instance with step attempt history."""
+
+    id: str
+    saga_id: str
+    user_id: str
+    correlation_id: str
+    status: str
+    current_step: int
+    payloads: dict[str, Any]
+    started_at: str
+    completed_at: str | None = None
+    updated_at: str
+    steps: list[SagaStepAttempt]
+    saga_name: str
+
+
+class ExecuteSagaRequest(BaseModel):
+    """Request body for executing a saga."""
+
+    payload: dict[str, Any]
+    correlation_id: str | None = None
+
+
+class PaginatedSagaInstances(BaseModel):
+    data: list[SagaInstance]
+    next_cursor: str | None = None
+    has_more: bool
+
+
+# ---------------------------------------------------------------------------
+# Cron Schedules
+# ---------------------------------------------------------------------------
+
+
+class CronSchedule(BaseModel):
+    id: str
+    user_id: str
+    roost_id: str
+    name: str | None = None
+    expression: str
+    payload: dict[str, Any] | None = None
+    headers: dict[str, Any] | None = None
+    is_active: bool
+    managed_by: str | None = None
+    next_fire_at: str
+    last_fired_at: str | None = None
+    fire_count: int
+    created_at: str
+    updated_at: str
+
+
+class CreateCronSchedule(BaseModel):
+    roost_id: str
+    name: str | None = None
+    expression: str
+    payload: dict[str, Any] | None = None
+    headers: dict[str, Any] | None = None
+    managed_by: str | None = None
+
+
+class UpdateCronSchedule(BaseModel):
+    name: str | None = None
+    expression: str | None = None
+    payload: dict[str, Any] | None = None
+    headers: dict[str, Any] | None = None
+    is_active: bool | None = None
+    managed_by: str | None = None

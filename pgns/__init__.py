@@ -89,6 +89,10 @@ __all__ = [
     "HealthMetrics",
     "HealthThresholds",
     "RoostHealth",
+    # Artifacts
+    "Artifact",
+    "CreateArtifactResponse",
+    "PaginatedArtifacts",
     # Agent helpers
     "CORRELATION_ID_HEADER",
     "CORRELATION_ID_PATTERN",
@@ -162,6 +166,10 @@ _DEPRECATED_IMPORTS: dict[str, str] = {
     "HealthMetrics": "pgns.sdk.models",
     "HealthThresholds": "pgns.sdk.models",
     "RoostHealth": "pgns.sdk.models",
+    # Artifacts
+    "Artifact": "pgns.sdk.models",
+    "CreateArtifactResponse": "pgns.sdk.models",
+    "PaginatedArtifacts": "pgns.sdk.models",
     # Agent helpers
     "CORRELATION_ID_HEADER": "pgns.sdk.agents",
     "CORRELATION_ID_PATTERN": "pgns.sdk.agents",

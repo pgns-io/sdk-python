@@ -21,10 +21,8 @@ def _auth_headers(api_key: str | None, access_token: str | None) -> dict[str, st
     return {}
 
 
-def _handle_response(response: httpx.Response) -> Any:
-    """Parse an httpx response, raising PigeonsError on non-2xx."""
-    if response.status_code == 204:
-        return None
+def _raise_for_status(response: httpx.Response) -> None:
+    """Raise PigeonsError if the response is not successful."""
     if not response.is_success:
         try:
             body = response.json()
@@ -34,4 +32,17 @@ def _handle_response(response: httpx.Response) -> Any:
             message = response.reason_phrase or "Unknown error"
             code = None
         raise PigeonsError(message, response.status_code, code=code)
+
+
+def _handle_response(response: httpx.Response) -> Any:
+    """Parse an httpx response, raising PigeonsError on non-2xx."""
+    if response.status_code == 204:
+        return None
+    _raise_for_status(response)
     return response.json()
+
+
+def _handle_raw_response(response: httpx.Response) -> bytes:
+    """Return raw bytes from a successful response, raising PigeonsError on non-2xx."""
+    _raise_for_status(response)
+    return response.content

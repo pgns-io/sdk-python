@@ -14,6 +14,12 @@ from collections.abc import AsyncIterator, Iterator
 import httpx
 
 _DEFAULT_RETRY_DELAY = 3.0
+# Read timeout must be finite -- httpx with timeout=None blocks forever through
+# Envoy proxies (App Runner) even when bytes are available in the kernel buffer.
+# 60s is 4x the server keepalive interval (15s), so under normal conditions data
+# arrives well before the timeout. If the proxy buffers anyway, the timeout fires
+# and the outer loop reconnects with Last-Event-ID.
+_SSE_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
 
 
 def event_stream(
@@ -52,7 +58,7 @@ def event_stream(
 
         try:
             with httpx.Client() as client:
-                with client.stream("GET", url, headers=headers, timeout=None) as response:
+                with client.stream("GET", url, headers=headers, timeout=_SSE_TIMEOUT) as response:
                     response.raise_for_status()
                     buffer = ""
                     for chunk in response.iter_text():
@@ -95,7 +101,9 @@ async def async_event_stream(
 
         try:
             async with httpx.AsyncClient() as client:
-                async with client.stream("GET", url, headers=headers, timeout=None) as response:
+                async with client.stream(
+                    "GET", url, headers=headers, timeout=_SSE_TIMEOUT
+                ) as response:
                     response.raise_for_status()
                     buffer = ""
                     async for chunk in response.aiter_text():

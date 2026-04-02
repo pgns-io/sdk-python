@@ -23,6 +23,8 @@ from pgns.tests.conftest import (
     API_KEY,
     BASE_URL,
     SAMPLE_APPLICATION,
+    SAMPLE_ARTIFACT,
+    SAMPLE_CREATE_ARTIFACT_RESPONSE,
     SAMPLE_ENDPOINT,
     SAMPLE_PIGEON,
     SAMPLE_ROOST,
@@ -207,3 +209,168 @@ async def test_publish_message() -> None:
     )
     assert result.pigeon_id == "pgn_test123"
     assert result.endpoints_matched == 3
+
+
+# -- Artifacts ----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_artifact_dict() -> None:
+    """create_artifact with dict data serializes to JSON."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["content-type"] == "application/json"
+        assert request.content == b'{"key":"value"}'
+        return httpx.Response(201, json=SAMPLE_CREATE_ARTIFACT_RESPONSE)
+
+    client = make_async_client(handler)
+    result = await client.create_artifact({"key": "value"})
+    assert result.artifact_id == "art_01HXYZ0123456789abcdefghij"
+    assert result.access_token == "dGhpcyBpcyBhIHRva2Vu"
+
+
+@pytest.mark.asyncio
+async def test_create_artifact_bytes() -> None:
+    """create_artifact with bytes and custom content type."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["content-type"] == "application/octet-stream"
+        assert request.content == b"\x00\x01\x02"
+        return httpx.Response(201, json=SAMPLE_CREATE_ARTIFACT_RESPONSE)
+
+    client = make_async_client(handler)
+    result = await client.create_artifact(b"\x00\x01\x02", content_type="application/octet-stream")
+    assert result.size_bytes == 1024
+
+
+@pytest.mark.asyncio
+async def test_create_artifact_with_headers() -> None:
+    """create_artifact passes task_id, correlation_id, auto_delete."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["x-pgns-task-id"] == "task_abc123"
+        assert request.headers["x-pgns-correlation-id"] == "corr_abc123"
+        assert "auto_delete=true" in str(request.url)
+        return httpx.Response(201, json=SAMPLE_CREATE_ARTIFACT_RESPONSE)
+
+    client = make_async_client(handler)
+    await client.create_artifact(
+        {"data": 1},
+        task_id="task_abc123",
+        correlation_id="corr_abc123",
+        auto_delete=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_artifact_owner() -> None:
+    """get_artifact with API key auth returns raw bytes."""
+    body = b"raw artifact content"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["authorization"] == f"Bearer {API_KEY}"
+        assert request.url.path == "/v1/artifacts/art_01HXYZ0123456789abcdefghij"
+        return httpx.Response(200, content=body)
+
+    client = make_async_client(handler)
+    data, _ct = await client.get_artifact("art_01HXYZ0123456789abcdefghij")
+    assert data == body
+
+
+@pytest.mark.asyncio
+async def test_get_artifact_with_token() -> None:
+    """get_artifact with token query param."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert "token=dGhpcyBpcyBhIHRva2Vu" in str(request.url)
+        return httpx.Response(200, content=b"data")
+
+    client = make_async_client(handler)
+    data, _ct = await client.get_artifact(
+        "art_01HXYZ0123456789abcdefghij", token="dGhpcyBpcyBhIHRva2Vu"
+    )
+    assert data == b"data"
+
+
+@pytest.mark.asyncio
+async def test_list_artifacts() -> None:
+    """list_artifacts returns paginated response."""
+    paginated = {"data": [SAMPLE_ARTIFACT], "next_cursor": None, "has_more": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/artifacts"
+        return httpx.Response(200, json=paginated)
+
+    client = make_async_client(handler)
+    result = await client.list_artifacts()
+    assert len(result.data) == 1
+    assert result.data[0].id == "art_01HXYZ0123456789abcdefghij"
+    assert result.has_more is False
+
+
+@pytest.mark.asyncio
+async def test_list_artifacts_with_correlation_id() -> None:
+    """list_artifacts with correlation_id filter."""
+    paginated = {"data": [SAMPLE_ARTIFACT], "next_cursor": None, "has_more": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert "correlation_id=corr_abc123" in str(request.url)
+        return httpx.Response(200, json=paginated)
+
+    client = make_async_client(handler)
+    await client.list_artifacts(correlation_id="corr_abc123")
+
+
+@pytest.mark.asyncio
+async def test_list_artifacts_with_task_id() -> None:
+    """list_artifacts with task_id filter."""
+    paginated: dict[str, object] = {"data": [], "next_cursor": None, "has_more": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert "task_id=task_abc123" in str(request.url)
+        return httpx.Response(200, json=paginated)
+
+    client = make_async_client(handler)
+    await client.list_artifacts(task_id="task_abc123")
+
+
+@pytest.mark.asyncio
+async def test_delete_artifact() -> None:
+    """delete_artifact sends DELETE and handles 204."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "DELETE"
+        assert request.url.path == "/v1/artifacts/art_01HXYZ0123456789abcdefghij"
+        return httpx.Response(204)
+
+    client = make_async_client(handler)
+    await client.delete_artifact("art_01HXYZ0123456789abcdefghij")
+
+
+@pytest.mark.asyncio
+async def test_create_artifact_error_json_body() -> None:
+    """create_artifact raises PigeonsError on 4xx with JSON error body."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            413, json={"error": "Artifact too large", "code": "artifact_too_large"}
+        )
+
+    client = make_async_client(handler)
+    with pytest.raises(PigeonsError) as exc_info:
+        await client.create_artifact({"key": "value"})
+    assert exc_info.value.status == 413
+    assert "Artifact too large" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_get_artifact_error_non_json_body() -> None:
+    """get_artifact raises PigeonsError on 4xx with non-JSON body."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, text="Not Found")
+
+    client = make_async_client(handler)
+    with pytest.raises(PigeonsError) as exc_info:
+        await client.get_artifact("art_nonexistent")
+    assert exc_info.value.status == 404

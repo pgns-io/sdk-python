@@ -7,6 +7,7 @@ from __future__ import annotations
 
 __all__ = ["PigeonsClient"]
 
+import json
 import threading
 from collections.abc import Callable
 from typing import Any
@@ -14,7 +15,7 @@ from urllib.parse import quote
 
 import httpx
 
-from pgns._client import _auth_headers, _handle_response
+from pgns._client import _auth_headers, _handle_raw_response, _handle_response
 from pgns.errors import PigeonsAuthError, PigeonsError
 from pgns.models import (
     AgentCard,
@@ -25,13 +26,19 @@ from pgns.models import (
     CreateAgentCard,
     CreateApiKeyRequest,
     CreateApplication,
+    CreateArtifactResponse,
+    CreateCronSchedule,
     CreateDestination,
     CreateEndpoint,
     CreateRoost,
+    CreateSaga,
     CreateTemplate,
+    CronSchedule,
     Destination,
     Endpoint,
+    ExecuteSagaRequest,
     HealthThresholds,
+    PaginatedArtifacts,
     PaginatedDeliveryAttempts,
     PaginatedPigeons,
     PauseResponse,
@@ -43,10 +50,14 @@ from pgns.models import (
     ReplayResponse,
     Roost,
     RoostHealth,
+    Saga,
+    SagaInstance,
+    SagaInstanceDetail,
     SendResponse,
     Template,
     UpdateAgentCard,
     UpdateApiKeyRequest,
+    UpdateCronSchedule,
     UpdateDestination,
     UpdateProfileRequest,
     UpdateRoost,
@@ -145,6 +156,32 @@ class PigeonsClient:
                 self._access_token = None
                 raise PigeonsAuthError() from exc
         return _handle_response(response)
+
+    def _raw_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        content: bytes | None = None,
+        headers: dict[str, str] | None = None,
+        params: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        """Make a request returning the raw httpx.Response (for non-JSON bodies).
+
+        Note: this method does **not** implement the 401 token-refresh
+        retry that :meth:`_request` provides.  Artifact endpoints are
+        expected to be called with API-key auth, so the gap is acceptable.
+        """
+        hdrs = {**_auth_headers(self._api_key, self._access_token)}
+        if headers:
+            hdrs.update(headers)
+        return self._http.request(
+            method,
+            f"{self._base_url}{path}",
+            headers=hdrs,
+            content=content,
+            params=params,
+        )
 
     def _unauth_request(self, method: str, path: str, *, json: Any = None) -> Any:
         response = self._http.request(
@@ -477,7 +514,6 @@ class PigeonsClient:
         import base64
         import hashlib
         import hmac as hmac_mod
-        import json
         import time
         import uuid
 
@@ -578,3 +614,176 @@ class PigeonsClient:
             json=data.model_dump(),
         )
         return HealthThresholds.model_validate(raw)
+
+    # -- Artifacts ------------------------------------------------------------
+
+    def create_artifact(
+        self,
+        data: bytes | str | dict[str, object],
+        *,
+        content_type: str = "application/json",
+        task_id: str | None = None,
+        correlation_id: str | None = None,
+        auto_delete: bool = False,
+    ) -> CreateArtifactResponse:
+        """Upload an artifact and return its metadata + access token.
+
+        When *data* is a ``dict`` it is serialised to compact JSON and
+        *content_type* is forced to ``"application/json"`` regardless of
+        the caller-supplied value.
+        """
+        if isinstance(data, dict):
+            content = json.dumps(data, separators=(",", ":")).encode()
+            content_type = "application/json"
+        elif isinstance(data, str):
+            content = data.encode()
+        else:
+            content = data
+
+        hdrs: dict[str, str] = {"Content-Type": content_type}
+        if task_id:
+            hdrs["X-Pgns-Task-Id"] = task_id
+        if correlation_id:
+            hdrs["X-Pgns-Correlation-Id"] = correlation_id
+
+        params: dict[str, str] = {}
+        if auto_delete:
+            params["auto_delete"] = "true"
+
+        resp = self._raw_request(
+            "POST",
+            "/v1/artifacts",
+            content=content,
+            headers=hdrs,
+            params=params,
+        )
+        raw = _handle_response(resp)
+        return CreateArtifactResponse.model_validate(raw)
+
+    def get_artifact(self, artifact_id: str, *, token: str | None = None) -> tuple[bytes, str]:
+        """Download an artifact's raw bytes and content type.
+
+        Returns ``(data, content_type)``.  The optional *token* is passed
+        as a query parameter.
+        """
+        params: dict[str, str] = {}
+        if token:
+            params["token"] = token
+        resp = self._raw_request(
+            "GET",
+            f"/v1/artifacts/{quote(artifact_id, safe='')}",
+            params=params,
+        )
+        data = _handle_raw_response(resp)
+        content_type = resp.headers.get("content-type", "application/octet-stream")
+        return data, content_type
+
+    def list_artifacts(
+        self,
+        *,
+        correlation_id: str | None = None,
+        task_id: str | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> PaginatedArtifacts:
+        """List artifacts, optionally filtered by correlation_id or task_id."""
+        params: dict[str, str] = {}
+        if correlation_id:
+            params["correlation_id"] = correlation_id
+        if task_id:
+            params["task_id"] = task_id
+        if limit is not None:
+            params["limit"] = str(limit)
+        if cursor:
+            params["cursor"] = cursor
+        resp = self._raw_request("GET", "/v1/artifacts", params=params or None)
+        raw = _handle_response(resp)
+        return PaginatedArtifacts.model_validate(raw)
+
+    def delete_artifact(self, artifact_id: str) -> None:
+        """Delete an artifact."""
+        self._request("DELETE", f"/v1/artifacts/{quote(artifact_id, safe='')}")
+
+    # -- Sagas ----------------------------------------------------------------
+
+    def list_sagas(self) -> list[Saga]:
+        """List all saga definitions for the authenticated user."""
+        data = self._request("GET", "/v1/sagas")
+        return [Saga.model_validate(s) for s in data]
+
+    def create_saga(self, data: CreateSaga) -> Saga:
+        """Create a new saga definition."""
+        raw = self._request("POST", "/v1/sagas", json=data.model_dump(exclude_none=True))
+        return Saga.model_validate(raw)
+
+    def get_saga(self, saga_id: str) -> Saga:
+        """Get a saga by ID."""
+        raw = self._request("GET", f"/v1/sagas/{quote(saga_id, safe='')}")
+        return Saga.model_validate(raw)
+
+    def get_saga_by_name(self, name: str) -> Saga:
+        """Get a saga by name."""
+        raw = self._request("GET", f"/v1/sagas/by-name/{quote(name, safe='')}")
+        return Saga.model_validate(raw)
+
+    def delete_saga(self, saga_id: str) -> None:
+        """Delete a saga definition."""
+        self._request("DELETE", f"/v1/sagas/{quote(saga_id, safe='')}")
+
+    def execute_saga(self, saga_id: str, data: ExecuteSagaRequest) -> SagaInstance:
+        """Execute a saga, creating a new instance."""
+        raw = self._request(
+            "POST",
+            f"/v1/sagas/{quote(saga_id, safe='')}/execute",
+            json=data.model_dump(exclude_none=True),
+        )
+        return SagaInstance.model_validate(raw)
+
+    def list_saga_instances(
+        self,
+        saga_id: str,
+        *,
+        limit: int | None = None,
+    ) -> list[SagaInstance]:
+        """List instances of a saga."""
+        qs = f"?limit={limit}" if limit is not None else ""
+        data = self._request("GET", f"/v1/sagas/{quote(saga_id, safe='')}/instances{qs}")
+        return [SagaInstance.model_validate(i) for i in data]
+
+    def get_saga_instance(self, saga_id: str, instance_id: str) -> SagaInstanceDetail:
+        """Get a saga instance with step attempt history."""
+        raw = self._request(
+            "GET",
+            f"/v1/sagas/{quote(saga_id, safe='')}/instances/{quote(instance_id, safe='')}",
+        )
+        return SagaInstanceDetail.model_validate(raw)
+
+    # -- Cron Schedules -------------------------------------------------------
+
+    def list_cron_schedules(self) -> list[CronSchedule]:
+        """List all cron schedules for the authenticated user."""
+        data = self._request("GET", "/v1/cron-schedules")
+        return [CronSchedule.model_validate(c) for c in data]
+
+    def get_cron_schedule(self, schedule_id: str) -> CronSchedule:
+        """Get a cron schedule by ID."""
+        data = self._request("GET", f"/v1/cron-schedules/{quote(schedule_id, safe='')}")
+        return CronSchedule.model_validate(data)
+
+    def create_cron_schedule(self, data: CreateCronSchedule) -> CronSchedule:
+        """Create a new cron schedule."""
+        raw = self._request("POST", "/v1/cron-schedules", json=data.model_dump(exclude_none=True))
+        return CronSchedule.model_validate(raw)
+
+    def update_cron_schedule(self, schedule_id: str, data: UpdateCronSchedule) -> CronSchedule:
+        """Update a cron schedule."""
+        raw = self._request(
+            "PATCH",
+            f"/v1/cron-schedules/{quote(schedule_id, safe='')}",
+            json=data.model_dump(exclude_unset=True),
+        )
+        return CronSchedule.model_validate(raw)
+
+    def delete_cron_schedule(self, schedule_id: str) -> None:
+        """Delete a cron schedule."""
+        self._request("DELETE", f"/v1/cron-schedules/{quote(schedule_id, safe='')}")

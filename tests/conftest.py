@@ -126,3 +126,26 @@ SAMPLE_ENDPOINT: dict[str, Any] = {
     "created_at": "2024-01-01T00:00:00Z",
     "updated_at": "2024-01-01T00:00:00Z",
 }
+
+SAMPLE_ARTIFACT: dict[str, Any] = {
+    "id": "art_01HXYZ0123456789abcdefghij",
+    "user_id": "user_abc123",
+    "task_id": "task_abc123",
+    "correlation_id": "corr_abc123",
+    "content_type": "application/json",
+    "size_bytes": 1024,
+    "auto_delete": False,
+    "consumed": False,
+    "consumed_at": None,
+    "consumed_by": None,
+    "expires_at": "2026-04-02T00:00:00Z",
+    "created_at": "2026-03-26T00:00:00Z",
+}
+
+SAMPLE_CREATE_ARTIFACT_RESPONSE: dict[str, Any] = {
+    "artifact_id": "art_01HXYZ0123456789abcdefghij",
+    "url": "/v1/artifacts/art_01HXYZ0123456789abcdefghij",
+    "access_token": "dGhpcyBpcyBhIHRva2Vu",
+    "size_bytes": 1024,
+    "expires_at": "2026-04-02T00:00:00Z",
+}
