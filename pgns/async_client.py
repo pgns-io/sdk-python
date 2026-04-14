@@ -214,6 +214,10 @@ class AsyncPigeonsClient:
         data = await self._request("GET", f"/v1/roosts/{quote(roost_id, safe='')}")
         return Roost.model_validate(data)
 
+    async def get_roost_by_name(self, name: str) -> Roost:
+        data = await self._request("GET", f"/v1/roosts/by-name/{quote(name, safe='')}")
+        return Roost.model_validate(data)
+
     async def create_roost(self, data: CreateRoost) -> Roost:
         raw = await self._request("POST", "/v1/roosts", json=data.model_dump(exclude_none=True))
         return Roost.model_validate(raw)

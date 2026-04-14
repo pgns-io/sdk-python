@@ -220,6 +220,11 @@ class PigeonsClient:
         data = self._request("GET", f"/v1/roosts/{quote(roost_id, safe='')}")
         return Roost.model_validate(data)
 
+    def get_roost_by_name(self, name: str) -> Roost:
+        """Get a roost by name."""
+        data = self._request("GET", f"/v1/roosts/by-name/{quote(name, safe='')}")
+        return Roost.model_validate(data)
+
     def create_roost(self, data: CreateRoost) -> Roost:
         """Create a new roost (webhook endpoint)."""
         raw = self._request("POST", "/v1/roosts", json=data.model_dump(exclude_none=True))

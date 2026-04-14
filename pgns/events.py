@@ -61,8 +61,8 @@ def event_stream(
                 with client.stream("GET", url, headers=headers, timeout=_SSE_TIMEOUT) as response:
                     response.raise_for_status()
                     buffer = ""
-                    for chunk in response.iter_text():
-                        buffer += chunk
+                    for chunk in response.iter_raw():
+                        buffer += chunk.decode("utf-8", errors="replace")
                         while "\n" in buffer:
                             line, buffer = buffer.split("\n", 1)
                             if line.startswith("id:"):
@@ -71,6 +71,10 @@ def event_stream(
                                 yield line[5:].strip()
         except GeneratorExit:
             return
+        except httpx.ReadTimeout:
+            # Transient buffering delay (e.g. Envoy proxy holding frames).
+            # Reconnect immediately with Last-Event-ID instead of full delay.
+            continue
         except Exception:
             pass
         time.sleep(_DEFAULT_RETRY_DELAY)
@@ -106,8 +110,8 @@ async def async_event_stream(
                 ) as response:
                     response.raise_for_status()
                     buffer = ""
-                    async for chunk in response.aiter_text():
-                        buffer += chunk
+                    async for chunk in response.aiter_raw():
+                        buffer += chunk.decode("utf-8", errors="replace")
                         while "\n" in buffer:
                             line, buffer = buffer.split("\n", 1)
                             if line.startswith("id:"):
@@ -116,6 +120,8 @@ async def async_event_stream(
                                 yield line[5:].strip()
         except GeneratorExit:
             return
+        except httpx.ReadTimeout:
+            continue
         except Exception:
             pass
         await asyncio.sleep(_DEFAULT_RETRY_DELAY)
